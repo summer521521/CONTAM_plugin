@@ -9,8 +9,9 @@ Use this skill when the user wants to inspect, diagnose, clone, batch-run, co-si
 
 ## Setup
 
-- The plugin starts the MCP server through `scripts/start-contam-plugin-mcp.ps1`.
+- The plugin starts the MCP server through `scripts/start-contam-mcp.ps1`.
 - The plugin also ships `scripts/Invoke-ContamProjectGuard.ps1` for local PRJ hygiene, input checks, output cleanup, result-profile updates, and XLog triage.
+- The current official CONTAM release checked for this workflow is CONTAM 3.4.0.8, with command-line tools such as ContamX 3.4.0.3. Re-check the official NIST release page before changing executable assumptions.
 - `CONTAM_PLUGIN_ROOT` is set by the launcher when the plugin runs from this repository.
 - `CONTAM_HOME` may point to the directory containing CONTAM executables.
 - `CONTAM_CHINESE_HOME` may point to an extracted `contam_chinese` release; when set, the launcher uses those localized executables unless explicit tool paths override them.
