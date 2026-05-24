@@ -83,6 +83,35 @@ Use this flow before GUI work:
 7. Inspect the newest `.xlog`; trust `Simulation completed successfully.` over a GUI impression that the console "closed".
 8. If a manual ContamW run reports `CONTAMX.EXE: simulation terminated abnormally` but command-line ContamX exits 0 and writes a successful XLog, treat it as a GUI result handoff/loading issue, not a solver issue.
 
+For generated models that are meant to match a hand-built ContamW reference, pass structural expectations into the guard:
+
+```powershell
+.\scripts\Invoke-ContamProjectGuard.ps1 `
+  -ProjectPath "<case>\model.prj" `
+  -Mode InputCheck `
+  -ExpectedZoneCount 9 `
+  -ExpectedPathCount 49 `
+  -ExpectedAmbientPathCount 40 `
+  -ExpectedInterzonePathCount 9 `
+  -MinimumAmbientPathsPerZone 1
+```
+
+Use the expected counts from the reference case, not from the generated model. A model can pass ContamX input checks while still being too simplified for the user's intended ContamW case.
+
+## Reference PRJ Learning Flow
+
+When the user provides a hand-built ContamW `.prj` as a reference for a generated project, treat the hand-built file as the structural source of truth before changing generation logic.
+
+1. Compare section counts first: zones, source/sink elements, flow elements, flow paths, source/sinks, schedules, and wind pressure profiles.
+2. Compare flow path inventory by class: zone-to-ambient paths, interzone paths, vertical or stair paths, and paths with wind pressure profile fields enabled.
+3. Preserve every real opening represented in the reference model. Do not collapse multiple facade leaks, doors, windows, supplies, and exhausts into one generic ambient path per room unless the user explicitly asks for a simplified model.
+4. Preserve inter-floor/stair connectivity as explicit paths. If the reference uses a stair or vertical connection, do not replace it with same-floor hall links just to make the SketchPad layout easier.
+5. If the reference has no wind pressure profiles and uses neutral exterior path fields, do not introduce WPC profiles merely because they look more physical. Add WPC only when the case definition, weather study, or user request requires it.
+6. Renaming zones, flow elements, schedules, and sources is useful for readability, but after renaming verify that source/sink rows, initial concentrations, schedule ids, and zone ids still point to the same physical rooms.
+7. For GUI-facing cases, prefer a complete path inventory plus simpler, valid SketchPad geometry over a visually clean drawing that hides or omits airflow paths.
+
+Recent lesson from a two-floor SF6/COMIS-style comparison: the hand-built reference had 9 zones, 18 flow elements, and 49 flow paths (40 ambient and 9 interzone), while a generated GUI variant had 9 zones, 20 flow elements, and 27 flow paths (20 ambient and 7 interzone). The useful correction is not to copy the case values into the plugin, but to force generated workflows to carry over the reference model's path inventory and check ambient/interzone counts explicitly.
+
 ## Case Matrix Flow
 
 Use `run_contam_case_matrix` when the user needs a complete case workflow from an existing `.prj`:

@@ -20,6 +20,12 @@ param(
 
   [int]$ExpectedPathCount = 0,
 
+  [int]$ExpectedAmbientPathCount = 0,
+
+  [int]$ExpectedInterzonePathCount = 0,
+
+  [int]$MinimumAmbientPathsPerZone = 0,
+
   [int]$ExpectedSourceSinkCount = 0
 )
 
@@ -126,6 +132,111 @@ function Find-CountSection([System.Collections.Generic.List[string]]$Lines, [str
   }
 
   return $null
+}
+
+function Get-SectionDataLines([System.Collections.Generic.List[string]]$Lines, $Section) {
+  $rows = New-Object System.Collections.Generic.List[string]
+  if ($null -eq $Section) {
+    return [string[]]$rows
+  }
+
+  for ($i = $Section.HeaderIndex + 1; $i -lt $Section.EndIndex; $i += 1) {
+    $line = [string]$Lines[$i]
+    $trimmed = $line.Trim()
+    if ([string]::IsNullOrWhiteSpace($trimmed) -or $trimmed.StartsWith("!")) {
+      continue
+    }
+
+    $rows.Add($trimmed) | Out-Null
+  }
+
+  return [string[]]$rows
+}
+
+function Get-ZoneIds([System.Collections.Generic.List[string]]$Lines, $ZoneSection) {
+  $zoneIds = New-Object System.Collections.Generic.List[int]
+  foreach ($row in (Get-SectionDataLines $Lines $ZoneSection)) {
+    $tokens = @($row -split "\s+")
+    if ($tokens.Count -ge 1) {
+      try {
+        $zoneIds.Add([int]$tokens[0]) | Out-Null
+      } catch {
+        continue
+      }
+    }
+  }
+
+  return [int[]]$zoneIds
+}
+
+function Get-FlowPathStats([System.Collections.Generic.List[string]]$Lines, $FlowPathSection, [int[]]$ZoneIds) {
+  $ambientCount = 0
+  $interzoneCount = 0
+  $windPressureLinkedCount = 0
+  $ambientByZone = [ordered]@{}
+  foreach ($zoneId in $ZoneIds) {
+    $ambientByZone[[string]$zoneId] = 0
+  }
+
+  foreach ($row in (Get-SectionDataLines $Lines $FlowPathSection)) {
+    $tokens = @($row -split "\s+")
+    if ($tokens.Count -lt 18) {
+      continue
+    }
+
+    try {
+      $n = [int]$tokens[2]
+      $m = [int]$tokens[3]
+      $w = [int]$tokens[6]
+      $wPmod = [double]::Parse($tokens[16], [Globalization.CultureInfo]::InvariantCulture)
+      $wazm = [double]::Parse($tokens[17], [Globalization.CultureInfo]::InvariantCulture)
+    } catch {
+      continue
+    }
+
+    if ($n -eq -1 -or $m -eq -1) {
+      $ambientCount += 1
+      $zoneId = if ($n -eq -1) { $m } else { $n }
+      if ($zoneId -gt 0) {
+        $key = [string]$zoneId
+        if (-not $ambientByZone.Contains($key)) {
+          $ambientByZone[$key] = 0
+        }
+        $ambientByZone[$key] = [int]$ambientByZone[$key] + 1
+      }
+
+      if ($w -ne 0 -or [Math]::Abs($wPmod) -gt 0.0000001 -or $wazm -ne -1) {
+        $windPressureLinkedCount += 1
+      }
+    } else {
+      $interzoneCount += 1
+    }
+  }
+
+  $missingAmbientZones = @($ambientByZone.GetEnumerator() |
+    Where-Object { [int]$_.Value -eq 0 } |
+    ForEach-Object { [int]$_.Key })
+
+  $belowMinimumZones = @()
+  if ($MinimumAmbientPathsPerZone -gt 0) {
+    $belowMinimumZones = @($ambientByZone.GetEnumerator() |
+      Where-Object { [int]$_.Value -lt $MinimumAmbientPathsPerZone } |
+      ForEach-Object {
+        [ordered]@{
+          zone = [int]$_.Key
+          ambientPaths = [int]$_.Value
+        }
+      })
+  }
+
+  return [ordered]@{
+    ambient = $ambientCount
+    interzone = $interzoneCount
+    windPressureLinkedAmbient = $windPressureLinkedCount
+    ambientByZone = $ambientByZone
+    missingAmbientZones = $missingAmbientZones
+    belowMinimumAmbientZones = $belowMinimumZones
+  }
 }
 
 function Set-NextLine([System.Collections.Generic.List[string]]$Lines, [string]$LabelPattern, [string]$ValueLine) {
@@ -300,12 +411,14 @@ if ($CleanOutputs -or $Mode -eq "Clean") {
 
 $lines = Get-ProjectLines $resolvedProject
 $sections = [ordered]@{}
+$sectionDetails = [ordered]@{}
 foreach ($label in @("zones", "flow paths", "source/sinks")) {
   $section = Find-CountSection $lines $label
   if ($null -eq $section) {
     $failures.Add("Missing PRJ section: $label.") | Out-Null
   } else {
     $sections[$label] = $section.Count
+    $sectionDetails[$label] = $section
   }
 }
 
@@ -317,6 +430,29 @@ if ($ExpectedPathCount -gt 0 -and $sections["flow paths"] -ne $ExpectedPathCount
 }
 if ($ExpectedSourceSinkCount -gt 0 -and $sections["source/sinks"] -ne $ExpectedSourceSinkCount) {
   $failures.Add("Source/sink count mismatch: expected $ExpectedSourceSinkCount, got $($sections["source/sinks"]).") | Out-Null
+}
+
+$flowPathStats = [ordered]@{}
+if ($sectionDetails.Contains("zones") -and $sectionDetails.Contains("flow paths")) {
+  $zoneIds = Get-ZoneIds $lines $sectionDetails["zones"]
+  $flowPathStats = Get-FlowPathStats $lines $sectionDetails["flow paths"] $zoneIds
+
+  if ($ExpectedAmbientPathCount -gt 0 -and $flowPathStats.ambient -ne $ExpectedAmbientPathCount) {
+    $failures.Add("Ambient flow path count mismatch: expected $ExpectedAmbientPathCount, got $($flowPathStats.ambient).") | Out-Null
+  }
+  if ($ExpectedInterzonePathCount -gt 0 -and $flowPathStats.interzone -ne $ExpectedInterzonePathCount) {
+    $failures.Add("Interzone flow path count mismatch: expected $ExpectedInterzonePathCount, got $($flowPathStats.interzone).") | Out-Null
+  }
+  if ($MinimumAmbientPathsPerZone -gt 0 -and $flowPathStats.belowMinimumAmbientZones.Count -gt 0) {
+    $zoneList = @($flowPathStats.belowMinimumAmbientZones | ForEach-Object { "$($_.zone)=$($_.ambientPaths)" }) -join ", "
+    $failures.Add("Ambient path minimum not met for zone(s): $zoneList; required at least $MinimumAmbientPathsPerZone per zone.") | Out-Null
+  }
+  if ($flowPathStats.missingAmbientZones.Count -gt 0) {
+    $recommendations.Add("Some zones have no ambient flow path: $($flowPathStats.missingAmbientZones -join ', '). ContamW reference models usually keep at least one explicit exterior opening per naturally ventilated zone.") | Out-Null
+  }
+  if ($sections["zones"] -gt 1 -and $flowPathStats.interzone -eq 0) {
+    $recommendations.Add("No interzone flow paths were found. For multi-zone models, preserve real door, stair, or transfer openings instead of relying only on ambient links.") | Out-Null
+  }
 }
 
 $runControl = Get-RunControl $lines
@@ -367,6 +503,7 @@ $summary = [ordered]@{
   resultProfile = $ResultProfile
   contamxPath = $contamx
   sectionCounts = $sections
+  flowPathStats = $flowPathStats
   runControl = $runControl
   exitCode = $exitCode
   xlog = $xlogSummary
