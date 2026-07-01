@@ -20,14 +20,7 @@
     "scripts/start-contam-plugin-mcp.ps1",
     "contam-mcp/src/",
     "contam-mcp/scripts/",
-    "contam-mcp/README.md",
-    "contamw3.exe",
-    "contamx3.exe",
-    "olch2d32.dll",
-    "prjup.exe",
-    "simcomp.exe",
-    "simread.exe",
-    "ContamHelp.chm"
+    "contam-mcp/README.md"
   ],
   "os": [
     "win32"

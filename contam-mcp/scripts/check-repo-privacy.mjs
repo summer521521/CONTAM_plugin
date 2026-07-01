@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 function getRepoRoot() {
@@ -38,10 +38,11 @@ function makeSnippet(text, index) {
 }
 
 const repoRoot = getRepoRoot();
+const slash = String.raw`\\`;
 const patterns = [
   {
     name: "Windows user profile path",
-    regex: /[A-Za-z]:\\Users\\[^\\\r\n]+(?:\\[^\r\n]*)?/g,
+    regex: new RegExp(`[A-Za-z]:${slash}Users${slash}[^${slash}\\r\\n]+(?:${slash}[^\\r\\n]*)?`, "g"),
   },
   {
     name: "POSIX home directory path",
@@ -53,6 +54,9 @@ const findings = [];
 
 for (const relativePath of getTrackedFiles(repoRoot)) {
   const fullPath = path.join(repoRoot, relativePath);
+  if (!existsSync(fullPath)) {
+    continue;
+  }
   const content = readFileSync(fullPath).toString("latin1");
 
   for (const pattern of patterns) {
