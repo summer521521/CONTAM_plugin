@@ -1,14 +1,14 @@
 {
   "name": "contam-tools",
   "version": "0.1.1",
-  "description": "Personal Codex plugin for running and inspecting CONTAM projects through a local CONTAM MCP server.",
+  "description": "Codex plugin for running and inspecting CONTAM projects through a local CONTAM MCP server.",
   "author": {
     "name": "summer521521",
     "url": "https://github.com/summer521521"
   },
-  "homepage": "https://github.com/summer521521/codex-personal-plugins",
-  "repository": "https://github.com/summer521521/codex-personal-plugins",
-  "license": "UNLICENSED",
+  "homepage": "https://github.com/summer521521/CONTAM_plugin",
+  "repository": "https://github.com/summer521521/CONTAM_plugin",
+  "license": "MIT",
   "keywords": [
     "codex",
     "mcp",
@@ -20,6 +20,7 @@
   "interface": {
     "displayName": "CONTAM Tools",
     "shortDescription": "Run CONTAM projects through MCP.",
+    "composerIcon": "./assets/icon.svg",
     "longDescription": "Packages a local CONTAM MCP launcher, project guard script, and workflow skill for installation/API discovery, project inspection, diagnostics, case hygiene, scenario cloning, case matrices, ContamW SketchPad layout generation, GUI-safe result settings, contamxpy co-simulation, simulation, text-result triage, and bridge sessions.",
     "developerName": "summer521521",
     "category": "Productivity",
